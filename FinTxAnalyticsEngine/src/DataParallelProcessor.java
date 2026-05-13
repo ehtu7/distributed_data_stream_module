@@ -43,15 +43,18 @@ public class DataParallelProcessor {
         .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().stream().mapToDouble(txn -> txn.amount).average().orElse(0.0)));
     }
 
-     //top 3 merchants by spend
-     public List<Map.Entry<String, Double>> topMerchantsBySpend(List<Transaction> transactions, int topN) {
-        return transactions.parallelStream()
-                .collect(Collectors.groupingBy(t -> t.merchant, Collectors.summingDouble(t -> t.amount)))
-                .entrySet()
-                .parallelStream()
-                .sorted(Map.Entry.<String, Double>comparingByValue(java.util.Comparator.reverseOrder()))
-                .limit(topN)
-                .collect(Collectors.toList());
+    // top merchants by spend using concurrent grouping for better parallel scalability
+    public List<Map.Entry<String, Double>> topMerchantsBySpend(List<Transaction> transactions, int topN) {
+        java.util.concurrent.ConcurrentMap<String, Double> sums = transactions.parallelStream()
+            .collect(Collectors.groupingByConcurrent(
+                t -> t.merchant,
+                Collectors.summingDouble(t -> t.amount)
+            ));
+
+        return sums.entrySet().parallelStream()
+            .sorted(Map.Entry.<String, Double>comparingByValue(java.util.Comparator.reverseOrder()))
+            .limit(topN)
+            .collect(Collectors.toList());
     }
 
      //Return top 10 highest-spending customers
